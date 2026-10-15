@@ -1,0 +1,73 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>About club-tasks</title><style>
+:root{--bg:#fff;--fg:#1c1e21;--mut:#6b7280;--line:#d8dce1;--acc:#2563eb}
+@media (prefers-color-scheme:dark){:root{--bg:#14161a;--fg:#e6e8eb;--mut:#9aa1ab;--line:#2d323a;--acc:#60a5fa}}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif;margin:0 auto;max-width:760px;padding:16px}
+h1{font-size:22px}h2{font-size:16px;margin-top:26px}a{color:var(--acc)}table{border-collapse:collapse;width:100%}
+td,th{border-bottom:1px solid var(--line);padding:5px 8px;text-align:left;vertical-align:top}th{color:var(--mut)}
+code{background:var(--line);padding:1px 4px;border-radius:4px;font-size:13px}
+</style></head><body><p><a href="index.html">← Back to the dashboard</a></p>
+<h1>About this dashboard: club-tasks</h1>
+<p>A bench of real club-3090 bug fixes, used to compare locally served models, harnesses and effort levels. The page you came from shows the live progress of the runs.</p>
+<h2>1. The question</h2>
+<p>Can a locally served model, driven by a coding agent, fix real club-3090 bugs so that the repo's own tests pass? A follow-up came from <a href="https://github.com/noonghunna/club-3090/discussions/1626">discussion #1626</a>: does the harness (omp, Hermes) or the effort level change the answer?</p>
+
+<h2>2. Why a new bench</h2>
+<p>GLM-5.3-Flash and Qwen3.8-Flash-Next launched on 2026-08-26. The public coding benches I checked all predate them, so their problems could be in training data. Every task here is a PR merged after that date.</p>
+<table>
+<tr><th>Bench</th><th>Problem vintage</th></tr>
+<tr><td>LiveCodeBench v6</td><td>problems from 2025; Flash Next scored 86/90 here, so it can't separate models</td></tr>
+<tr><td>Aider polyglot</td><td>Dec 2024</td></tr>
+<tr><td>SWE-rebench public splits</td><td>newest 2026_03 on Hugging Face, July 2026 on Harbor Hub</td></tr>
+<tr><td>Terminal-Bench 2.0</td><td>late 2025</td></tr>
+</table>
+
+<h2>3. How it works</h2>
+<ul>
+<li><b>Tasks:</b> 321 PRs merged since 2026-08-27 → 115 small enough for one session and touching <code>scripts/tests/</code> → 67 whose tests fail before the PR and pass after it, offline in Docker → 20 after screening, across 9 areas.</li>
+<li><b>Task text:</b> the linked issue, or the PR's problem section with the fix cut out.</li>
+<li><b>Agent:</b> stock mini-swe-agent with a bash shell, in a no-network Docker container holding a clean checkout from before the PR. Thinking on, effort low, 100 steps, 60 minutes per task.</li>
+<li><b>Grading:</b> the PR's own tests, hidden from the agent, run against the agent's working tree.</li>
+<li><b>Measures:</b> solved; partial credit (the hidden test's checks, scaled so before-the-PR = 0 and the PR = 1); whether it edited the PR's files; regressions in nearby tests; minutes per task; solved per agent-hour.</li>
+</ul>
+
+<h2>4. What changed mid-eval</h2>
+<p>The first draw split the tasks 6 / 4 / 10: six every config solved, four that separated configs, ten nobody solved. Reading the failures showed that 8 of those 10 had hidden tests checking something the task text never states (a CLI shape, a function name, an exact message). Only 2 were genuine misses.</p>
+<p>Each of the 8 got an <b>Interface</b> section written from its hidden test, and all 8 were re-run on every config. GLM IQ4_XS went from 0/8 to 6/8 on them. The old results are kept in <code>draw1-v1/</code>, so the final report can show what the missing details cost each model. Rows marked † on the dashboard are these 8 tasks.</p>
+
+<h2>5. What's running now, and why</h2>
+<ul>
+<li><b>Chain v2, bare mini-swe-agent (the main round):</b> the 8 tasks that got Interface sections re-run as draw 1 on all five configs (GLM IQ4_XS and GLM avar6, ThinkingCap, Strata IQ4_XS, Strata Q4_K_XL), so each config has a full draw 1 on the revised text. Then a second draw on all 20 tasks for ThinkingCap and both Strata configs, to separate real differences from run-to-run noise. The GLM configs get one draw because each takes 10 to 20 hours. This round ends with <code>report-agent-evals.md</code>.</li>
+<li><b>omp arm:</b> the same 20 tasks through omp on ThinkingCap-27B, Qwen3.8-Flash-Next (Strata IQ4_XS) and the better GLM config. The maintainer asked on #1626 for the omp arm to cover Flash Next and ThinkingCap-27B; the GLM stays for the harness comparison.</li>
+<li><b>Assistant tasks:</b> 26 everyday non-coding tasks (filing, triage, summaries, scheduling) through Hermes and omp on ThinkingCap and Flash Next. It answers @henrykrinkle01's question about which model to use for everyday assistant work.</li>
+<li><b>Effort × harness (the 2×2):</b> low versus the top effort rung (xhigh for Qwen3.8, max for GLM), each with bare mini-swe-agent and with omp. It is the other half of #1626. ThinkingCap also gets a second omp draw at low.</li>
+<li><b>Hard assistant tasks:</b> the 26 base assistant tasks hit a ceiling (both models 26/26 through omp once two task bugs were fixed), so a harder set of 12 (hard-v1: long inputs, long jobs, conflicting sources, error recovery, planted instructions, changed requirements) runs as a pilot after the 2×2.</li>
+<li><b>An omp effort bug:</b> the first omp pass sent no effort level, so Strata ran at xhigh and GLM at max. Those runs are filed as the top-rung cells, and omp at low is re-run on both with the fixed runner.</li>
+</ul>
+<p>Stage order on the page: chain v2 (re-runs and second draws) → omp → assistant → the effort runs, config by config.</p>
+
+<h2>6. Configs</h2>
+<table>
+<tr><th>Tag</th><th>Model and serving</th></tr>
+<tr><td><code>strata-iq4xs</code></td><td>Qwen3.8-Flash-Next UD-IQ4_XS on Strata, layer split, 262K</td></tr>
+<tr><td><code>strata-q4kxl</code></td><td>Qwen3.8-Flash-Next UD-Q4_K_XL on Strata, same settings</td></tr>
+<tr><td><code>thinkingcap-dualfast</code></td><td>ThinkingCap-Qwen3.8-27B, <code>sgl/thinkingcap38-27b-dual-fast</code>, RAM KV tier 64 GB, 2 concurrent</td></tr>
+<tr><td><code>glm-avar6</code></td><td>GLM-5.3-Flash avar6 Q2_K-Q3_K, llama.cpp moe-cache slug</td></tr>
+<tr><td><code>glm-iq4xs</code></td><td>GLM-5.3-Flash UD-IQ4_XS, llama.cpp moe-cache, ub 1024 / admit 32</td></tr>
+</table>
+<p>Hardware: 2× RTX 5090, Threadripper PRO 3975WX. Suffixes: <code>-omp</code> is the omp harness, <code>-xhigh</code> is the top effort rung, <code>-omp-xhigh</code> is both.</p>
+
+<h2>7. Reading the numbers</h2>
+<ul>
+<li>With 20 pass/fail tasks, two configs need to differ by about 6 tasks to be told apart on one draw, and about 4–5 with two draws. Smaller gaps are noise.</li>
+<li>Prefer the paired comparison (same tasks, McNemar) and partial credit, which have more resolution than the solve count.</li>
+<li>Read tasks per hour next to the solve rate. A config that solves fewer tasks but finishes twice as many per hour can be the better daily driver.</li>
+<li>Numbers on the dashboard are live and interim until a stage shows "done".</li>
+</ul>
+
+<h2>8. Links</h2>
+<ul>
+<li><a href="https://github.com/noonghunna/club-3090/discussions/1626">club-3090 discussion #1626</a></li>
+<li>Method and files: <code>glm53/club-tasks/README.md</code>; assistant set: <code>glm53/club-tasks/assistant/README.md</code></li>
+</ul>
+</body></html>
